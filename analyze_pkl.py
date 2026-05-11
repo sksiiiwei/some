@@ -3,9 +3,6 @@
 Safe Pickle Analysis Tool
 Structured summary of pickle file safety.
 
-Uses pickletools to inspect without loading.
-Output format matches Room 2 expected output exactly.
-
 Usage: python safe_analysis.py <pickle_file>
 """
 
