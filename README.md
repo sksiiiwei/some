@@ -1,4 +1,3 @@
-# some
 
 # 🛡️ Safe Pickle Analysis Tool
 
