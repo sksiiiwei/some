@@ -14,7 +14,6 @@ import os
 import json
 from pathlib import Path
 
-# Расширенный список опасных модулей (включая системные псевдонимы)
 DANGEROUS_MODULES = {
     "os", "subprocess", "sys", "socket", "shutil", "ctypes", 
     "builtins", "importlib", "code", "codeop", "pty", "posix", 
@@ -29,14 +28,12 @@ DANGEROUS_FUNCTIONS = {
     "spawn", "fork", "pty"
 }
 
-# Расширенные подозрительные паттерны (сеть, шеллы, файлы)
 SUSPICIOUS_PATTERNS =[
     "http://", "https://", "ftp://", "curl ", "wget ", 
     "/etc/passwd", "/etc/shadow", "/tmp/", "$(", "`", 
     "/bin/sh", "/bin/bash", "cmd.exe", "powershell", "nc -"
 ]
 
-# Все опкоды pickle, которые могут загружать строки/байты
 STRING_OPCODES = {
     "STRING", "BINSTRING", "SHORT_BINSTRING", 
     "UNICODE", "BINUNICODE", "SHORT_BINUNICODE", 
@@ -44,7 +41,6 @@ STRING_OPCODES = {
 }
 
 def format_size(size_bytes):
-    """Возвращает человекочитаемый размер файла."""
     if size_bytes >= 1_000_000_000:
         return f"{size_bytes / 1_000_000_000:.2f} GB"
     elif size_bytes >= 1_000_000:
@@ -54,10 +50,6 @@ def format_size(size_bytes):
     return f"{size_bytes} bytes"
 
 def analyze_pickle_data(filepath):
-    """
-    Парсит pickle и возвращает словарь с результатами анализа.
-    Не привязан к формату вывода (полезно для API).
-    """
     path = Path(filepath)
     result = {
         "file": str(path),
@@ -81,60 +73,50 @@ def analyze_pickle_data(filepath):
         result["errors"] = f"Failed to parse pickle: {str(e)}"
         return result
 
-    recent_strings =[]  # Отслеживание последних загруженных строк для STACK_GLOBAL
+    recent_strings =[]
     imports_found =[]
 
     for opcode, arg, pos in ops:
         name = opcode.name
 
-        # 1. Отслеживание строк и байтов
         if name in STRING_OPCODES:
             val = arg.decode('utf-8', errors='ignore') if isinstance(arg, bytes) else str(arg)
             recent_strings.append(val)
             
-            # Сохраняем только последние 2 строки (обычно это модуль и функция)
             if len(recent_strings) > 2:
                 recent_strings.pop(0)
 
-            # Проверка на подозрительные паттерны
             for pattern in SUSPICIOUS_PATTERNS:
                 if pattern in val and val not in result["findings"]["suspicious_strings"]:
                     result["findings"]["suspicious_strings"].append(val)
 
-        # 2. Обнаружение импортов (Протоколы 0-3: GLOBAL)
         elif name == "GLOBAL":
             if isinstance(arg, str) and " " in arg:
                 mod, func = arg.split(" ", 1)
                 imports_found.append((mod, func))
 
-        # 3. Обнаружение импортов (Протоколы 4+: STACK_GLOBAL)
         elif name == "STACK_GLOBAL":
             if len(recent_strings) >= 2:
                 mod, func = recent_strings[0], recent_strings[1]
                 imports_found.append((mod, func))
             
-            # Очищаем стек строк после использования
             recent_strings.clear()
 
-        # 4. Обнаружение выполнения функций (REDUCE)
         elif name == "REDUCE":
             result["findings"]["exec_calls"] += 1
 
-    # Анализ найденных импортов
     for mod, func in imports_found:
         if mod in DANGEROUS_MODULES or func in DANGEROUS_FUNCTIONS:
             threat = f"{mod}.{func}"
             if threat not in result["findings"]["dangerous_imports"]:
                 result["findings"]["dangerous_imports"].append(threat)
 
-    # Вынесение вердикта
     if result["findings"]["dangerous_imports"] or result["findings"]["suspicious_strings"]:
         result["status"] = "UNSAFE"
 
     return result
 
 def print_text_report(report):
-    """Выводит отчет в удобочитаемом текстовом формате."""
     print(f"{'='*40}")
     print(f"File: {report['file']}")
     print(f"Size: {report['size_human']}")
@@ -157,7 +139,6 @@ def print_text_report(report):
             print(f"  - '{s}'")
 
     if report["status"] == "UNSAFE":
-        # Динамическое формирование причины для вердикта
         targets = [imp for imp in findings["dangerous_imports"]]
         target_str = targets[0] if targets else "unknown execution"
         print(f"\nVerdict: UNSAFE - Contains executable code targeting '{target_str}'")
@@ -176,12 +157,11 @@ def main():
         print(f"Error: Path not found: {args.path}")
         sys.exit(1)
 
-    # Собираем файлы для анализа
     files_to_scan =[]
     if target_path.is_file():
         files_to_scan.append(target_path)
     elif target_path.is_dir():
-        for ext in ("*.pkl", "*.pickle", "*.pt", "*.pth"): # поддержка PyTorch форматов
+        for ext in ("*.pkl", "*.pickle", "*.pt", "*.pth"):
             files_to_scan.extend(target_path.rglob(ext))
 
     if not files_to_scan:
@@ -193,22 +173,19 @@ def main():
         report = analyze_pickle_data(file)
         results.append(report)
 
-    # Вывод результатов
     if args.json:
         print(json.dumps(results, indent=2))
     else:
         for report in results:
             print_text_report(report)
         
-        # Общая статистика для директорий
         if len(files_to_scan) > 1:
             unsafe_count = sum(1 for r in results if r["status"] == "UNSAFE")
             print(f"Scanned {len(files_to_scan)} files. Found {unsafe_count} UNSAFE files.")
 
-    # Возвращаем код ошибки, если есть опасные файлы (полезно для CI/CD)
     if any(r["status"] == "UNSAFE" for r in results):
         sys.exit(1)
 
 if __name__ == "__main__":
-    import sys # импортируется здесь, чтобы не засорять глобальное пространство
+    import sys
     main()
