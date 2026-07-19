@@ -21,20 +21,17 @@ You can run the script against a single file or an entire directory.
 
 **1. Analyze a single file:**
 ```
-bash
+
 python safe_analysis_pkl.py model.pkl
 2. Scan an entire directory for ML models:
-code
-Bash
+
 python safe_analysis_pkl.py /opt/supply-chain/models/
 3. Output results in JSON (useful for integration & jq):
-code
-Bash
+
 python safe_analysis_pkl.py model.pkl --json | jq .
 📊 Example Output
 Standard Output (Safe File):
-code
-Text
+
 ========================================
 File: /models/clean_model.pkl
 Size: 15.20 MB
@@ -42,8 +39,7 @@ Size: 15.20 MB
 Verdict: SAFE - No executable code detected
 ========================================
 Standard Output (Compromised File):
-code
-Text
+
 ========================================
 File: /models/hacked_model.pt
 Size: 4.30 MB
